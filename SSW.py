@@ -69,11 +69,17 @@ class SemiSupervisedWiSARD(): # Input: labeled examples and unlabeled examples -
                     ss_confidence = 0.0 #if best result == 0, confidence is zero
                 if(ss_confidence >= self.__ss_confidence): #if I have confidence in the result, i'll train this example to the selected class
                     class_name = list_possible_classes[-1][0]
-                    self.__main_wisard.train(class_name, unlabeled_X[position])         
+                    self.__main_wisard.add_training(class_name, unlabeled_X[position])         
 
     def __setup(self):
         for class_name in self.__set_of_classes:
             self.__main_wisard.create_discriminator(class_name)
+
+    def predict(self, testing_corpus):
+        result = []
+        for position in xrange(len(testing_corpus)):
+            result.append(self.__main_wisard.classify(testing_corpus[position]))
+        return result
 
 
 if __name__ == "__main__":
