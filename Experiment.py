@@ -137,6 +137,7 @@ class Experiment():
                                                        num_bits_addr = num_bits_addr,
                                                        retina_size = retina_size,
                                                        set_of_classes = set_of_classes))
+                print "fitted WiSARD ", i
 
             for generation in xrange(number_gen):
                 X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
@@ -145,12 +146,78 @@ class Experiment():
                 for cls in population: #fitting WiSARDs
                     self.WiSARD_fit(cls, X, y, Xun)
                     result.append(self.SS_WiSARD_eval(cls, testing_X, testing_y))
-                                        
-            print "Ending of Generation: ", generation
+
+                result = np.array(result) #do not forget to keep the best result to understand when to stop
+                print "best result until now: ", result[np.argmax(result)]
+                survivers = result.argsort()[-num_survivers:][::-1]
+                
+                if(generation < number_gen - 1): #avoiding another iteration if generations is the last
+                    index = self.crossover(index, survivers, init_pop)
+                    population = []
+                    i = 0
+                    for new_setup_parameters in index:
+                        i += 1
+                        ss_confidence = new_setup_parameters[0]
+                        ignore_zero_addr = new_setup_parameters[1]
+                        confidence_threshold = new_setup_parameters[2]
+                        bleaching = new_setup_parameters[3]
+                        num_bits_addr = new_setup_parameters[4]
+
+                        population.append(SemiSupervisedWiSARD(ss_confidence = ss_confidence,
+                                                               ignore_zero_addr= ignore_zero_addr,
+                                                               confidence_threshold = confidence_threshold,
+                                                               bleaching = bleaching,
+                                                               num_bits_addr = num_bits_addr,
+                                                               retina_size = retina_size,
+                                                               set_of_classes = set_of_classes))
+                        print "fitted WiSARD ", i
+                print "Ending of Generation: ", generation
+            print "best_parameter_set: ", index[np.argmax(result)], result[np.argmax(result)]
                     
         else:
             raise Exception("Classifier must be WiSARD or...")
 
+    def crossover(self, index, survivers, init_pop):
+        new_index = []
+        aux = []
+        number_parameters = len(index[0])
+
+        for position in survivers:
+            new_index.append(index[position])
+        for i in xrange(init_pop - len(survivers)):
+            p1 = random.randint(0,len(survivers) -1)
+            p2 = random.randint(0,len(survivers) -1)
+            new_elem = []
+            for parameter_pos in xrange(number_parameters):
+                if(random.random() > 0.5):
+                    new_elem.append(new_index[p1][parameter_pos])
+                else:
+                    new_elem.append(new_index[p2][parameter_pos])
+            aux.append(new_elem)
+        for i in xrange(len(aux)): #mutation
+            if(random.random() < 0.01):
+                print 'mutation ocurried'
+                self.WiSARD_mutation(aux[i])
+
+        new_index = new_index + aux
+        return new_index
+    def WiSARD_mutation(self, params):
+        param = random.randint(0, len(params) - 1) #find the parameter to change
+        if(param == 0):
+            ss_confidence = random.uniform(0.0, 1.0) #ss_confidence => (0.0,1.0)
+            params[0] = ss_confidence
+        elif(param == 1):
+            ignore_zero_addr = boolean[random.randint(0,1)] #ignore_zero_addr => True or False
+            params[1] = ignore_zero_addr
+        elif(param == 2):
+            confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
+            params[2] = confidence_threshold
+        elif(param == 3):
+            bleaching = boolean[random.randint(0,1)] #bleaching => True or False
+            params[3] = bleaching
+        elif(param == 4):
+            num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
+            params[4] = num_bits_addr
         
     def WiSARD_fit(self, classifier, X, y, Xun):
         classifier.fit(X, y, Xun)
@@ -164,7 +231,6 @@ class Experiment():
             classes = list(prediction.keys())
             class_list.append(classes[values.index(max(values))])
         for i in xrange(len(class_list)):
-            print class_list[i], testing_y[i]
             if(class_list[i] == testing_y[i]):
                 summing += 1
         return summing/float(len(testing_X))
@@ -172,7 +238,7 @@ class Experiment():
 if __name__ == "__main__":
 
     exp1 = Experiment("hcr-train","en")
-    exp1.get_best_params(number_gen = 1, 
+    exp1.get_best_params(number_gen = 5, 
                          classifier = 'WiSARD',
-                         init_pop = 1,
-                         num_survivers = 5)
+                         init_pop = 100,
+                         num_survivers = 10)
