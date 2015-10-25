@@ -144,6 +144,7 @@ class Experiment():
 
                 result = []
                 for cls in population: #fitting WiSARDs
+                #SHOULD be so good to parallel this step!
                     self.WiSARD_fit(cls, X, y, Xun)
                     result.append(self.SS_WiSARD_eval(cls, testing_X, testing_y))
 
@@ -198,9 +199,9 @@ class Experiment():
             if(random.random() < 0.01):
                 print 'mutation ocurried'
                 self.WiSARD_mutation(aux[i])
-
         new_index = new_index + aux
         return new_index
+
     def WiSARD_mutation(self, params):
         param = random.randint(0, len(params) - 1) #find the parameter to change
         if(param == 0):
