@@ -123,6 +123,7 @@ class Experiment():
         retina_size = self.__feature_vector_len
         set_of_classes = self.__set_of_classes
         index = []
+        log_file = open("log.csv", "w")
         
         if(classifier == 'WiSARD'):
             for i in xrange(init_pop):
@@ -150,6 +151,7 @@ class Experiment():
                     result.append(self.SS_WiSARD_eval(cls, testing_X, testing_y))
 
                 result_array = np.array(result) #do not forget to keep the best result to understand when to stop
+                log_file.write(str(result[np.argmax(result_array)])+';')
                 print "best result until now: ", result[np.argmax(result_array)]
                 survivers = result_array.argsort()[-num_survivers:][::-1]
                 
@@ -191,12 +193,16 @@ class Experiment():
                         population[i].train()
                         result.append(self.S3VM_eval(population[i], testing_X, testing_y))
                         result_array = np.array(result)
+                        log_file.write(str(result[np.argmax(result_array)])+';')
+                        print "best result until now: ", result[np.argmax(result_array)]
                         survivers = result_array.argsort()[-num_survivers:][::-1]
                 else:
                     for i in xrange(len(population)):
                         population[i].train()
                         result.append(self.S3VM_eval(population[i], testing_X, testing_y))
                         result_array = np.array(result)
+                        log_file.write(str(result[np.argmax(result_array)])+';')
+                        print "best result until now: ", result[np.argmax(result_array)]
                         survivers = result_array.argsort()[-num_survivers:][::-1]
 
                 index = self.crossover(index, survivers, init_pop, 'S3VM')
@@ -209,7 +215,6 @@ class Experiment():
                     kernel_type = new_setup_parameters[3]
                     population.append(qns3vm.QN_S3VM(X, y, Xun, random))
                 print "Ending of Generation: ", generation
-                print "best result until now: ", result[np.argmax(result_array)]
             print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
         else:
             raise Exception("Classifier must be WiSARD, S3VM .. ")
@@ -323,7 +328,7 @@ if __name__ == "__main__":
             class_2 += class_2
     print class_1, class_2
     '''
-    exp1.get_best_params(number_gen = 2, 
+    exp1.get_best_params(number_gen = 40, 
                          classifier = 'S3VM',
-                         init_pop = 5,
-                         num_survivers = 2)
+                         init_pop = 100,
+                         num_survivers = 10)
