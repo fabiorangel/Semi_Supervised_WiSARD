@@ -8,6 +8,7 @@ from Preproc import Utils
 import random
 from SSW import SemiSupervisedWiSARD
 import operator
+import qns3vm
 
 class Experiment():
 
@@ -19,6 +20,7 @@ class Experiment():
         self.__vectorizer_binary = CountVectorizer(min_df = 0.0, max_df = 1.0, binary = True)
         self.__X = []
         self.__y = []
+        self.__y_int = []
         self.__feature_vector_len = 0
         self.__set_of_classes = []
         self.__X_binary = []
@@ -36,10 +38,12 @@ class Experiment():
 
         corpus = []
         annotation = []
+        annotation_int = []
 
         for line in input_file:
             vec = line.split(';')
             annotation.append(vec[1].replace('\n',''))
+            annotation_int.append(int(vec[1].replace('\n','')))
             vec[0] = vec[0].lower()
             vec[0] = utl.remove_marks(vec[0])
             vec[0] = utl.replace_mentions(vec[0])
@@ -62,10 +66,11 @@ class Experiment():
         transform_binary = self.__vectorizer_binary.fit_transform(corpus)
 
         self.__feature_vector_len = len(feature_list)
-        self.__X = self.__vectorizer.transform(corpus)
+        self.__X = self.__vectorizer.transform(corpus).toarray().tolist()
         self.__X_binary = self.__vectorizer_binary.transform(corpus).toarray().tolist()
 
         self.__y = annotation
+        self.__y_int = annotation_int
         self.__set_of_classes = set(annotation)
 
     def random_subsampling(self, X_f, Xun_f, classifier): #implements random subsampling
@@ -174,7 +179,22 @@ class Experiment():
                         print "fitted WiSARD ", i
                 print "Ending of Generation: ", generation
             print "best_parameter_set: ", index[np.argmax(result)], result[np.argmax(result)]
-                    
+             
+        elif(classifier == 'S3VM'):
+            for generation in xrange(number_gen):
+                X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
+
+                for i in xrange(init_pop):
+                    lam = random.random()
+                    lamU = random.random()
+                    sigma = random.random()
+                    kernel_type = random.choice(['Linear', 'RBF'])
+                    index.append([lam, lamU, sigma, kernel_type])
+                    population.append(qns3vm.QN_S3VM(X, y, Xun, random))
+                    population[i].train()
+                    result.append(self.S3VM_eval(population[i], testing_X, testing_y))
+                    exit(0)
+
         else:
             raise Exception("Classifier must be WiSARD or...")
 
@@ -198,7 +218,7 @@ class Experiment():
         for i in xrange(len(aux)): #mutation
             if(random.random() < 0.01):
                 print 'mutation ocurried'
-                self.WiSARD_mutation(aux[i])
+                self.WiSARD_mutation(aux[i]) #if it is WiSARD, edit for future classifiers
         new_index = new_index + aux
         return new_index
 
@@ -236,10 +256,15 @@ class Experiment():
                 summing += 1
         return summing/float(len(testing_X))
 
+    def S3VM_eval(self, cls, testing_X, testing_y):
+        print cls.predict(testing_X)
+        return None
+
 if __name__ == "__main__":
 
     exp1 = Experiment("hcr-train","en")
     exp1.get_best_params(number_gen = 5, 
-                         classifier = 'WiSARD',
+                         classifier = 'S3VM',
                          init_pop = 100,
                          num_survivers = 10)
+    
