@@ -19,6 +19,7 @@ class Experiment():
         self.__vectorizer = CountVectorizer(min_df = 0.0, max_df = 1.0)
         self.__vectorizer_binary = CountVectorizer(min_df = 0.0, max_df = 1.0, binary = True)
         self.__X = []
+        self.__corpus = []
         self.__y = []
         self.__y_int = []
         self.__feature_vector_len = 0
@@ -35,8 +36,6 @@ class Experiment():
         stemmer.enableCaching(1000)
 
         input_file = open("Data_sets/"+self.__file_name+".csv", "r")
-
-        corpus = []
         annotation = []
         annotation_int = []
 
@@ -56,19 +55,17 @@ class Experiment():
                 if(self.__lang == 'pt'):
                     elem = stemmer(elem)
                 phrase = phrase+' '+elem
-            corpus.append(phrase.replace('\n',''))
+            self.__corpus.append(phrase.replace('\n',''))
 
-        self.__number_of_examples = len(corpus)
-
-        transform = self.__vectorizer.fit_transform(corpus)
+        self.__number_of_examples = len(self.__corpus)
+        transform = self.__vectorizer.fit_transform(self.__corpus)
         feature_list = self.__vectorizer.get_feature_names()
 
-        transform_binary = self.__vectorizer_binary.fit_transform(corpus)
+        transform_binary = self.__vectorizer_binary.fit_transform(self.__corpus)
 
         self.__feature_vector_len = len(feature_list)
-        self.__X = self.__vectorizer.transform(corpus).toarray().tolist()
-        self.__X_binary = self.__vectorizer_binary.transform(corpus).toarray().tolist()
-
+        self.__X = self.__vectorizer.transform(self.__corpus)
+        self.__X_binary = self.__vectorizer_binary.transform(self.__corpus).toarray().tolist()
         self.__y = annotation
         self.__y_int = annotation_int
         self.__set_of_classes = set(annotation)
@@ -108,14 +105,16 @@ class Experiment():
                 testing_annotation.append(self.__y[testing[i]])
         else:
             for i in xrange(len(X)):
-                corpus.append(self.__X[X[i]])
-                annotation.append(self.__y[X[i]])
+                corpus.append(self.__corpus[X[i]])
+                annotation.append(self.__y_int[X[i]])
             for i in xrange(len(Xun)):
-                unlabeled_corpus.append(self.__X[Xun[i]])
+                unlabeled_corpus.append(self.__corpus[Xun[i]])
             for i in xrange(len(testing)):
-                testing_corpus.append(self.__X[testing[i]])
-                testing_annotation.append(self.__y[testing[i]])
-
+                testing_corpus.append(self.__corpus[testing[i]])
+                testing_annotation.append(self.__y_int[testing[i]])
+            corpus = self.__vectorizer.transform(corpus)
+            unlabeled_corpus = self.__vectorizer.transform(unlabeled_corpus)
+            testing_corpus = self.__vectorizer.transform(testing_corpus)
         return corpus, annotation, unlabeled_corpus, testing_corpus, testing_annotation
 
     def get_best_params(self, number_gen, classifier, init_pop, num_survivers): #using genetic algorithm
@@ -142,23 +141,20 @@ class Experiment():
                                                        num_bits_addr = num_bits_addr,
                                                        retina_size = retina_size,
                                                        set_of_classes = set_of_classes))
-                print "fitted WiSARD ", i
-
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
             for generation in xrange(number_gen):
-                X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
-
                 result = []
                 for cls in population: #fitting WiSARDs
                 #SHOULD be so good to parallel this step!
                     self.WiSARD_fit(cls, X, y, Xun)
                     result.append(self.SS_WiSARD_eval(cls, testing_X, testing_y))
 
-                result = np.array(result) #do not forget to keep the best result to understand when to stop
-                print "best result until now: ", result[np.argmax(result)]
-                survivers = result.argsort()[-num_survivers:][::-1]
+                result_array = np.array(result) #do not forget to keep the best result to understand when to stop
+                print "best result until now: ", result[np.argmax(result_array)]
+                survivers = result_array.argsort()[-num_survivers:][::-1]
                 
                 if(generation < number_gen - 1): #avoiding another iteration if generations is the last
-                    index = self.crossover(index, survivers, init_pop)
+                    index = self.crossover(index, survivers, init_pop, 'WiSARD')
                     population = []
                     i = 0
                     for new_setup_parameters in index:
@@ -176,29 +172,49 @@ class Experiment():
                                                                num_bits_addr = num_bits_addr,
                                                                retina_size = retina_size,
                                                                set_of_classes = set_of_classes))
-                        print "fitted WiSARD ", i
-                print "Ending of Generation: ", generation
-            print "best_parameter_set: ", index[np.argmax(result)], result[np.argmax(result)]
-             
-        elif(classifier == 'S3VM'):
-            for generation in xrange(number_gen):
                 X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
+                print "Ending of Generation: ", generation
+            print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
 
-                for i in xrange(init_pop):
-                    lam = random.random()
-                    lamU = random.random()
-                    sigma = random.random()
-                    kernel_type = random.choice(['Linear', 'RBF'])
-                    index.append([lam, lamU, sigma, kernel_type])
+        elif(classifier == 'S3VM'):
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
+            for generation in xrange(number_gen):
+                result = []
+                if(population == []):
+                    for i in xrange(init_pop):
+                        lam = random.random()
+                        lamU = random.random()
+                        sigma = random.random()
+                        kernel_type = random.choice(['Linear', 'RBF'])
+                        index.append([lam, lamU, sigma, kernel_type])
+                        population.append(qns3vm.QN_S3VM(X, y, Xun, random))
+                        population[i].train()
+                        result.append(self.S3VM_eval(population[i], testing_X, testing_y))
+                        result_array = np.array(result)
+                        survivers = result_array.argsort()[-num_survivers:][::-1]
+                else:
+                    for i in xrange(len(population)):
+                        population[i].train()
+                        result.append(self.S3VM_eval(population[i], testing_X, testing_y))
+                        result_array = np.array(result)
+                        survivers = result_array.argsort()[-num_survivers:][::-1]
+
+                index = self.crossover(index, survivers, init_pop, 'S3VM')
+                population = []
+                for new_setup_parameters in index:
+                    X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
+                    lam = new_setup_parameters[0]
+                    lamU = new_setup_parameters[1]
+                    sigma = new_setup_parameters[2]
+                    kernel_type = new_setup_parameters[3]
                     population.append(qns3vm.QN_S3VM(X, y, Xun, random))
-                    population[i].train()
-                    result.append(self.S3VM_eval(population[i], testing_X, testing_y))
-                    exit(0)
-
+                print "Ending of Generation: ", generation
+                print "best result until now: ", result[np.argmax(result_array)]
+            print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
         else:
-            raise Exception("Classifier must be WiSARD or...")
+            raise Exception("Classifier must be WiSARD, S3VM .. ")
 
-    def crossover(self, index, survivers, init_pop):
+    def crossover(self, index, survivers, init_pop, cls):
         new_index = []
         aux = []
         number_parameters = len(index[0])
@@ -218,7 +234,10 @@ class Experiment():
         for i in xrange(len(aux)): #mutation
             if(random.random() < 0.01):
                 print 'mutation ocurried'
-                self.WiSARD_mutation(aux[i]) #if it is WiSARD, edit for future classifiers
+                if(cls == 'WiSARD'):
+                    self.WiSARD_mutation(aux[i]) #if it is WiSARD, edit for future classifiers
+                if(cls == 'S3VM'):
+                    self.S3VM_mutation(aux[i])
         new_index = new_index + aux
         return new_index
 
@@ -239,6 +258,21 @@ class Experiment():
         elif(param == 4):
             num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
             params[4] = num_bits_addr
+
+    def S3VM_mutation(self, params):
+        param = random.randint(0, len(params) - 1) #find the parameter to change
+        if(param == 0):
+            lam = random.random()
+            params[0] = lam
+        elif(param == 1):
+            lamU = random.random()
+            params[1] = lamU
+        elif(param == 2):
+            sigma = random.random()
+            params[2] = sigma
+        elif(param == 3):
+            kernel_type = random.choice(['Linear', 'RBF'])
+            params[3] = kernel_type
         
     def WiSARD_fit(self, classifier, X, y, Xun):
         classifier.fit(X, y, Xun)
@@ -257,14 +291,39 @@ class Experiment():
         return summing/float(len(testing_X))
 
     def S3VM_eval(self, cls, testing_X, testing_y):
-        print cls.predict(testing_X)
-        return None
+        results = cls.getPredictions(testing_X)
+        summing = 0
+        for i in xrange(len(results)):
+            if(results[i] == testing_y[i]):
+                summing += 1
+        return summing/float(len(testing_y))
 
 if __name__ == "__main__":
 
-    exp1 = Experiment("hcr-train","en")
-    exp1.get_best_params(number_gen = 5, 
+    exp1 = Experiment("new_sts","en")
+    '''
+    lam = random.random()
+    lamU = random.random()
+    sigma = random.random()
+    kernel_type = random.choice(['Linear', 'RBF'])
+    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.8, 0.01, "S3VM")
+
+    svm = qns3vm.QN_S3VM(X, y, Xun, random)
+    svm.train()
+    print type(testing_X[0])
+    result =  svm.getPredictions(testing_X)
+    class_1 = 0
+    class_2 = 0
+    print result
+    for i in result:
+        #print type(i)
+        if(i == -1.0):
+            class_1 += class_1
+        if(i == 1.0):
+            class_2 += class_2
+    print class_1, class_2
+    '''
+    exp1.get_best_params(number_gen = 2, 
                          classifier = 'S3VM',
-                         init_pop = 100,
-                         num_survivers = 10)
-    
+                         init_pop = 5,
+                         num_survivers = 2)

@@ -120,7 +120,7 @@ class QN_S3VM:
         """
         self.__model = None
         # Initiate model for sparse data
-        if isinstance(X_l, csc.csc_matrix):
+        if (isinstance(X_l, csc.csc_matrix) or True):
             self.__data_type = "sparse"
             self.__model = QN_S3VM_Sparse(X_l, L_l, X_u, random_generator, ** kw)
         # Initiate model for dense data
@@ -549,10 +549,12 @@ class QN_S3VM_Sparse:
         c_new = self.__c[:self.__dim-1]
         W = self.X.T*c_new - self.__mean_u.T*np.sum(c_new)
         # Again, possibility of dimension mismatch due to use of sparse matrices
+        
         if X.shape[1] > W.shape[0]:
             X = X[:,range(W.shape[0])]
         if X.shape[1] < W.shape[0]:
             W = W[range(X.shape[1])]
+
         X = X.tocsc()
         preds = X * W + self.__b
         if real_valued == True:
