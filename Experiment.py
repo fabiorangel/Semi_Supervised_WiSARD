@@ -9,6 +9,7 @@ import random
 from SSW import SemiSupervisedWiSARD
 import operator
 import qns3vm
+import matplotlib.pyplot as plt
 
 class Experiment():
 
@@ -123,6 +124,10 @@ class Experiment():
         retina_size = self.__feature_vector_len
         set_of_classes = self.__set_of_classes
         index = []
+        plot_result = []
+        global_best_accuracy = 0
+        global_best_index = []
+
         log_file = open("log.csv", "w")
         
         if(classifier == 'WiSARD'):
@@ -132,6 +137,7 @@ class Experiment():
                 confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
                 bleaching = boolean[random.randint(0,1)] #bleaching => True or False
                 num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
+                
 
                 index.append([ss_confidence, ignore_zero_addr, confidence_threshold, bleaching, num_bits_addr])
 
@@ -152,8 +158,13 @@ class Experiment():
 
                 result_array = np.array(result) #do not forget to keep the best result to understand when to stop
                 log_file.write(str(result[np.argmax(result_array)])+';')
-                print "best result until now: ", result[np.argmax(result_array)]
+                plot_result.append(result[np.argmax(result_array)])
                 survivers = result_array.argsort()[-num_survivers:][::-1]
+                print "best result until now: ", result[np.argmax(result_array)]
+                if(global_best_accuracy < result[np.argmax(result)]):
+                    global_best_accuracy = result[np.argmax(result)]
+                    global_best_index = index[np.argmax(result)]
+                plot_result.append(global_best_accuracy)
                 
                 if(generation < number_gen - 1): #avoiding another iteration if generations is the last
                     index = self.crossover(index, survivers, init_pop, 'WiSARD')
@@ -179,45 +190,60 @@ class Experiment():
             print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
 
         elif(classifier == 'S3VM'):
-            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
+            first = True
             for generation in xrange(number_gen):
+                X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
                 result = []
-                if(population == []):
+                if(not first):
+                    for new_setup_parameters in index:
+                        #X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
+                        lam = new_setup_parameters[0]
+                        lamU = new_setup_parameters[1]
+                        sigma = new_setup_parameters[2]
+                        kernel_type = new_setup_parameters[3]
+                        svm = ''
+                        svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
+                        svm.parameters['lam'] = lam
+                        svm.parameters['lamU'] = lamU
+                        svm.parameters['sigma'] = sigma
+                        svm.parameters['kernel_type'] = kernel_type
+                        svm.train()
+                        result.append(self.S3VM_eval(svm.getPredictions(testing_X), testing_y))
+
+                if(first):
                     for i in xrange(init_pop):
                         lam = random.random()
                         lamU = random.random()
                         sigma = random.random()
                         kernel_type = random.choice(['Linear', 'RBF'])
+                        svm = ''
+                        svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
+                        svm.parameters['lam'] = lam
+                        svm.parameters['lamU'] = lamU
+                        svm.parameters['sigma'] = sigma
+                        svm.parameters['kernel_type'] = kernel_type
+                        svm.train()
+                        #keeping the params and the related result
                         index.append([lam, lamU, sigma, kernel_type])
-                        population.append(qns3vm.QN_S3VM(X, y, Xun, random))
-                        population[i].train()
-                        result.append(self.S3VM_eval(population[i], testing_X, testing_y))
-                        result_array = np.array(result)
-                        log_file.write(str(result[np.argmax(result_array)])+';')
-                        print "best result until now: ", result[np.argmax(result_array)]
-                        survivers = result_array.argsort()[-num_survivers:][::-1]
-                else:
-                    for i in xrange(len(population)):
-                        population[i].train()
-                        result.append(self.S3VM_eval(population[i], testing_X, testing_y))
-                        result_array = np.array(result)
-                        log_file.write(str(result[np.argmax(result_array)])+';')
-                        print "best result until now: ", result[np.argmax(result_array)]
-                        survivers = result_array.argsort()[-num_survivers:][::-1]
+                        result.append(self.S3VM_eval(svm.getPredictions(testing_X), testing_y))
+                        first = False
 
+                result_array = np.array(result)                        
+                survivers = result_array.argsort()[-num_survivers:][::-1]
+                #keeping the global best
+                if(global_best_accuracy < result[np.argmax(result)]):
+                    global_best_accuracy = result[np.argmax(result)]
+                    global_best_index = index[np.argmax(result)]
+                plot_result.append(global_best_accuracy)
                 index = self.crossover(index, survivers, init_pop, 'S3VM')
-                population = []
-                for new_setup_parameters in index:
-                    X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
-                    lam = new_setup_parameters[0]
-                    lamU = new_setup_parameters[1]
-                    sigma = new_setup_parameters[2]
-                    kernel_type = new_setup_parameters[3]
-                    population.append(qns3vm.QN_S3VM(X, y, Xun, random))
+
+                print "best result in this generation: ", 'accuracy: ', result[np.argmax(result)], index[np.argmax(result)]
                 print "Ending of Generation: ", generation
-            print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
+            print "best_parameter_set: ", global_best_index, 'accuracy: ', global_best_accuracy
         else:
             raise Exception("Classifier must be WiSARD, S3VM .. ")
+        plt.plot(range(0, len(result)), global_best_accuracy)
+        plt.show()
 
     def crossover(self, index, survivers, init_pop, cls):
         new_index = []
@@ -226,6 +252,7 @@ class Experiment():
 
         for position in survivers:
             new_index.append(index[position])
+
         for i in xrange(init_pop - len(survivers)):
             p1 = random.randint(0,len(survivers) -1)
             p2 = random.randint(0,len(survivers) -1)
@@ -238,12 +265,12 @@ class Experiment():
             aux.append(new_elem)
         for i in xrange(len(aux)): #mutation
             if(random.random() < 0.01):
-                print 'mutation ocurried'
                 if(cls == 'WiSARD'):
                     self.WiSARD_mutation(aux[i]) #if it is WiSARD, edit for future classifiers
                 if(cls == 'S3VM'):
                     self.S3VM_mutation(aux[i])
         new_index = new_index + aux
+
         return new_index
 
     def WiSARD_mutation(self, params):
@@ -295,8 +322,7 @@ class Experiment():
                 summing += 1
         return summing/float(len(testing_X))
 
-    def S3VM_eval(self, cls, testing_X, testing_y):
-        results = cls.getPredictions(testing_X)
+    def S3VM_eval(self, results, testing_y):
         summing = 0
         for i in xrange(len(results)):
             if(results[i] == testing_y[i]):
@@ -328,7 +354,7 @@ if __name__ == "__main__":
             class_2 += class_2
     print class_1, class_2
     '''
-    exp1.get_best_params(number_gen = 40, 
+    exp1.get_best_params(number_gen = 10, 
                          classifier = 'S3VM',
                          init_pop = 100,
-                         num_survivers = 10)
+                         num_survivers = 20)
