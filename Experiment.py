@@ -118,141 +118,61 @@ class Experiment():
             testing_corpus = self.__vectorizer.transform(testing_corpus)
         return corpus, annotation, unlabeled_corpus, testing_corpus, testing_annotation
 
-    def get_best_params(self, number_gen, classifier, init_pop, num_survivers): #using genetic algorithm
-        population = []
-        boolean = {0: False, 1: True}
-        retina_size = self.__feature_vector_len
-        set_of_classes = self.__set_of_classes
-        index = []
-        plot_result = []
+    def genetic_optimization(self, number_gen, classifier, init_pop, num_survivers, iter_number): #genetic algorithm to optimize the params
+        param_index = []
+        result_index = []
         global_best_accuracy = 0
         global_best_index = []
-
-        log_file = open("log.csv", "w")
-        
-        if(classifier == 'WiSARD'):
+        results_to_plot = []
+        for i in xrange(init_pop):
+            param_index.append(self.get_params(classifier))
+        for gen in xrange(number_gen):
             for i in xrange(init_pop):
-                ss_confidence = random.uniform(0.0, 1.0) #ss_confidence => (0.0,1.0)
-                ignore_zero_addr = boolean[random.randint(0,1)] #ignore_zero_addr => True or False
-                confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
-                bleaching = boolean[random.randint(0,1)] #bleaching => True or False
-                num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
-                
-
-                index.append([ss_confidence, ignore_zero_addr, confidence_threshold, bleaching, num_bits_addr])
-
-                population.append(SemiSupervisedWiSARD(ss_confidence = ss_confidence,
-                                                       ignore_zero_addr= ignore_zero_addr,
-                                                       confidence_threshold = confidence_threshold,
-                                                       bleaching = bleaching,
-                                                       num_bits_addr = num_bits_addr,
-                                                       retina_size = retina_size,
-                                                       set_of_classes = set_of_classes))
-            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
-            for generation in xrange(number_gen):
-                result = []
-                for cls in population: #fitting WiSARDs
-                #SHOULD be so good to parallel this step!
-                    self.WiSARD_fit(cls, X, y, Xun)
-                    result.append(self.SS_WiSARD_eval(cls, testing_X, testing_y))
-
-                result_array = np.array(result) #do not forget to keep the best result to understand when to stop
-                log_file.write(str(result[np.argmax(result_array)])+';')
-                plot_result.append(result[np.argmax(result_array)])
-                survivers = result_array.argsort()[-num_survivers:][::-1]
-                print "best result until now: ", result[np.argmax(result_array)]
-                if(global_best_accuracy < result[np.argmax(result)]):
-                    global_best_accuracy = result[np.argmax(result)]
-                    global_best_index = index[np.argmax(result)]
-                plot_result.append(global_best_accuracy)
-                
-                if(generation < number_gen - 1): #avoiding another iteration if generations is the last
-                    index = self.crossover(index, survivers, init_pop, 'WiSARD')
-                    population = []
-                    i = 0
-                    for new_setup_parameters in index:
-                        i += 1
-                        ss_confidence = new_setup_parameters[0]
-                        ignore_zero_addr = new_setup_parameters[1]
-                        confidence_threshold = new_setup_parameters[2]
-                        bleaching = new_setup_parameters[3]
-                        num_bits_addr = new_setup_parameters[4]
-
-                        population.append(SemiSupervisedWiSARD(ss_confidence = ss_confidence,
-                                                               ignore_zero_addr= ignore_zero_addr,
-                                                               confidence_threshold = confidence_threshold,
-                                                               bleaching = bleaching,
-                                                               num_bits_addr = num_bits_addr,
-                                                               retina_size = retina_size,
-                                                               set_of_classes = set_of_classes))
-                X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'WiSARD')
-                print "Ending of Generation: ", generation
-            print "best_parameter_set: ", index[np.argmax(result)], 'accuracy: ',result[np.argmax(result)]
-
-        elif(classifier == 'S3VM'):
-            first = True
-            for generation in xrange(number_gen):
-                X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
-                result = []
-                if(not first):
-                    for new_setup_parameters in index:
-                        #X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, 'S3VM')
-                        lam = new_setup_parameters[0]
-                        lamU = new_setup_parameters[1]
-                        sigma = new_setup_parameters[2]
-                        kernel_type = new_setup_parameters[3]
-                        svm = ''
-                        svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
-                        svm.parameters['lam'] = lam
-                        svm.parameters['lamU'] = lamU
-                        svm.parameters['sigma'] = sigma
-                        svm.parameters['kernel_type'] = kernel_type
-                        svm.train()
-                        result.append(self.S3VM_eval(svm.getPredictions(testing_X), testing_y))
-
-                if(first):
-                    for i in xrange(init_pop):
-                        lam = random.random()
-                        lamU = random.random()
-                        sigma = random.random()
-                        kernel_type = random.choice(['Linear', 'RBF'])
-                        svm = ''
-                        svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
-                        svm.parameters['lam'] = lam
-                        svm.parameters['lamU'] = lamU
-                        svm.parameters['sigma'] = sigma
-                        svm.parameters['kernel_type'] = kernel_type
-                        svm.train()
-                        #keeping the params and the related result
-                        index.append([lam, lamU, sigma, kernel_type])
-                        result.append(self.S3VM_eval(svm.getPredictions(testing_X), testing_y))
-                        first = False
-
-                result_array = np.array(result)                        
-                survivers = result_array.argsort()[-num_survivers:][::-1]
-                #keeping the global best
-                if(global_best_accuracy < result[np.argmax(result)]):
-                    global_best_accuracy = result[np.argmax(result)]
-                    global_best_index = index[np.argmax(result)]
-                plot_result.append(global_best_accuracy)
-                index = self.crossover(index, survivers, init_pop, 'S3VM')
-
-                print "best result in this generation: ", 'accuracy: ', result[np.argmax(result)], index[np.argmax(result)]
-                print "Ending of Generation: ", generation
-            print "best_parameter_set: ", global_best_index, 'accuracy: ', global_best_accuracy
-        else:
-            raise Exception("Classifier must be WiSARD, S3VM .. ")
-        plt.plot(range(0, len(result)), global_best_accuracy)
+                result_index.append(self.get_function_result(classifier, param_index[i], iter_number))
+            result_array = np.array(result_index)
+            survivers = result_array.argsort()[-num_survivers:][::-1]
+            best_result = result_array[np.argmax(result_array)]
+            if(global_best_accuracy < best_result):
+                    global_best_accuracy = best_result
+                    global_best_index = param_index[np.argmax(result_array)]
+            results_to_plot.append(global_best_accuracy)
+            result_index = []
+            param_index = self.crossover(param_index, survivers, init_pop, classifier)
+            print "Ending generation: ", gen
+            print "Best Result until now", global_best_accuracy
+        plt.plot(range(0, len(results_to_plot)), results_to_plot)
         plt.show()
 
-    def crossover(self, index, survivers, init_pop, cls):
+    def get_function_result(self, classifier, index, iter_number):
+        partial_result = []
+        for i in xrange(iter_number):
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, classifier)
+            if(classifier == 'WiSARD'):
+                wisard = SemiSupervisedWiSARD(ss_confidence = index[0],
+                                              ignore_zero_addr= index[1],
+                                              confidence_threshold = index[2],
+                                              bleaching = index[3],
+                                              num_bits_addr = index[4],
+                                              retina_size = self.__feature_vector_len,
+                                              set_of_classes = self.__set_of_classes)
+                wisard.fit(X, y, Xun)
+                partial_result.append(self.SS_WiSARD_eval(wisard.predict(testing_X), testing_y))
+            if(classifier == 'S3VM'):
+                svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
+                svm.parameters['lam'] = index[0]
+                svm.parameters['lamU'] = index[1]
+                svm.parameters['sigma'] = index[2]
+                svm.parameters['kernel_type'] = index[3]
+                svm.train()
+                partial_result.append(self.S3VM_eval(svm.getPredictions(testing_X),testing_y))
+        return np.mean(partial_result)
+
+    def crossover(self, index, survivers, init_pop, classifier):
         new_index = []
         aux = []
         number_parameters = len(index[0])
-
         for position in survivers:
             new_index.append(index[position])
-
         for i in xrange(init_pop - len(survivers)):
             p1 = random.randint(0,len(survivers) -1)
             p2 = random.randint(0,len(survivers) -1)
@@ -265,52 +185,11 @@ class Experiment():
             aux.append(new_elem)
         for i in xrange(len(aux)): #mutation
             if(random.random() < 0.01):
-                if(cls == 'WiSARD'):
-                    self.WiSARD_mutation(aux[i]) #if it is WiSARD, edit for future classifiers
-                if(cls == 'S3VM'):
-                    self.S3VM_mutation(aux[i])
+                self.mutation(classifier, aux[i]) #if it is WiSARD, edit for future classifiers
         new_index = new_index + aux
-
         return new_index
 
-    def WiSARD_mutation(self, params):
-        param = random.randint(0, len(params) - 1) #find the parameter to change
-        if(param == 0):
-            ss_confidence = random.uniform(0.0, 1.0) #ss_confidence => (0.0,1.0)
-            params[0] = ss_confidence
-        elif(param == 1):
-            ignore_zero_addr = boolean[random.randint(0,1)] #ignore_zero_addr => True or False
-            params[1] = ignore_zero_addr
-        elif(param == 2):
-            confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
-            params[2] = confidence_threshold
-        elif(param == 3):
-            bleaching = boolean[random.randint(0,1)] #bleaching => True or False
-            params[3] = bleaching
-        elif(param == 4):
-            num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
-            params[4] = num_bits_addr
-
-    def S3VM_mutation(self, params):
-        param = random.randint(0, len(params) - 1) #find the parameter to change
-        if(param == 0):
-            lam = random.random()
-            params[0] = lam
-        elif(param == 1):
-            lamU = random.random()
-            params[1] = lamU
-        elif(param == 2):
-            sigma = random.random()
-            params[2] = sigma
-        elif(param == 3):
-            kernel_type = random.choice(['Linear', 'RBF'])
-            params[3] = kernel_type
-        
-    def WiSARD_fit(self, classifier, X, y, Xun):
-        classifier.fit(X, y, Xun)
-
-    def SS_WiSARD_eval(self, cls, testing_X, testing_y):
-        cls_result = cls.predict(testing_X) #after predicting all the testing data
+    def SS_WiSARD_eval(self, cls_result, testing_y):
         class_list = []
         summing = 0
         for prediction in cls_result:
@@ -320,7 +199,7 @@ class Experiment():
         for i in xrange(len(class_list)):
             if(class_list[i] == testing_y[i]):
                 summing += 1
-        return summing/float(len(testing_X))
+        return summing/float(len(testing_y))
 
     def S3VM_eval(self, results, testing_y):
         summing = 0
@@ -329,32 +208,31 @@ class Experiment():
                 summing += 1
         return summing/float(len(testing_y))
 
+    def get_params(self, classifier):
+        if(classifier == 'WiSARD'):
+            ss_confidence = random.uniform(0.0, 1.0) #ss_confidence => (0.0,1.0)
+            ignore_zero_addr = bleaching = random.choice([True, False]) #ignore_zero_addr => True or False
+            confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
+            bleaching = random.choice([True, False]) #bleaching => True or False
+            num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
+            return ss_confidence, ignore_zero_addr, confidence_threshold, bleaching, num_bits_addr
+        if(classifier == 'S3VM'):
+            lam = random.random()
+            lamU = random.random()
+            sigma = random.random()
+            kernel_type = random.choice(['Linear', 'RBF'])
+            return lam, lamU, sigma, kernel_type
+
+    def mutation(self, classifier, index):
+        new_index = self.get_params(classifier)
+        param = random.randint(0, len(index) - 1)
+        index[param] = new_index[param]
+
 if __name__ == "__main__":
 
     exp1 = Experiment("new_sts","en")
-    '''
-    lam = random.random()
-    lamU = random.random()
-    sigma = random.random()
-    kernel_type = random.choice(['Linear', 'RBF'])
-    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.8, 0.01, "S3VM")
-
-    svm = qns3vm.QN_S3VM(X, y, Xun, random)
-    svm.train()
-    print type(testing_X[0])
-    result =  svm.getPredictions(testing_X)
-    class_1 = 0
-    class_2 = 0
-    print result
-    for i in result:
-        #print type(i)
-        if(i == -1.0):
-            class_1 += class_1
-        if(i == 1.0):
-            class_2 += class_2
-    print class_1, class_2
-    '''
-    exp1.get_best_params(number_gen = 10, 
-                         classifier = 'S3VM',
-                         init_pop = 100,
-                         num_survivers = 20)
+    exp1.genetic_optimization(number_gen = 4, 
+                              classifier = 'S3VM',
+                              init_pop = 10,
+                              num_survivers = 3,
+                              iter_number = 1)
