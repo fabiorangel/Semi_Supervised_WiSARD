@@ -10,6 +10,7 @@ from SSW import SemiSupervisedWiSARD
 import operator
 import qns3vm
 import matplotlib.pyplot as plt
+import time
 
 class Experiment():
 
@@ -70,6 +71,9 @@ class Experiment():
         self.__y = annotation
         self.__y_int = annotation_int
         self.__set_of_classes = set(annotation)
+    
+    def get_status(self):
+        return self.__feature_vector_len, list(self.__set_of_classes)
 
     def random_subsampling(self, X_f, Xun_f, classifier): #implements random subsampling
         if(Xun_f + X_f >= 1.0):
@@ -124,9 +128,11 @@ class Experiment():
         global_best_accuracy = 0
         global_best_index = []
         results_to_plot = []
+        results_file = open('result.csv', 'w')
         for i in xrange(init_pop):
             param_index.append(self.get_params(classifier))
         for gen in xrange(number_gen):
+            time1 = time.time()
             for i in xrange(init_pop):
                 result_index.append(self.get_function_result(classifier, param_index[i], iter_number))
             result_array = np.array(result_index)
@@ -138,9 +144,11 @@ class Experiment():
             results_to_plot.append(global_best_accuracy)
             result_index = []
             param_index = self.crossover(param_index, survivers, init_pop, classifier)
-            print "Ending generation: ", gen
+            print "Ending generation: ", gen, "in:", str(time.time() - time1)
             print "Best Result until now", global_best_accuracy
         plt.plot(range(0, len(results_to_plot)), results_to_plot)
+        results_file.write(str(results_to_plot))
+        results_file.write(str(global_best_index))
         plt.show()
 
     def get_function_result(self, classifier, index, iter_number):
@@ -231,8 +239,8 @@ class Experiment():
 if __name__ == "__main__":
 
     exp1 = Experiment("new_sts","en")
-    exp1.genetic_optimization(number_gen = 4, 
-                              classifier = 'S3VM',
-                              init_pop = 10,
-                              num_survivers = 3,
-                              iter_number = 1)
+    exp1.genetic_optimization(number_gen = 40, 
+                              classifier = 'WiSARD',
+                              init_pop = 100,
+                              num_survivers = 20,
+                              iter_number = 10)
