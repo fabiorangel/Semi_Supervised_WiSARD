@@ -11,6 +11,7 @@ import operator
 import qns3vm
 import matplotlib.pyplot as plt
 import time
+from seminb import *
 
 class Experiment():
 
@@ -73,7 +74,7 @@ class Experiment():
         self.__set_of_classes = set(annotation)
     
     def get_status(self):
-        return self.__feature_vector_len, list(self.__set_of_classes)
+        return self.__feature_vector_len, list(self.__set_of_classes), self.__X, self.__y
 
     def random_subsampling(self, X_f, Xun_f, classifier): #implements random subsampling
         if(Xun_f + X_f >= 1.0):
@@ -108,7 +109,7 @@ class Experiment():
             for i in xrange(len(testing)):
                 testing_corpus.append(self.__X_binary[testing[i]])
                 testing_annotation.append(self.__y[testing[i]])
-        else:
+        elif(classifier == 'S3VM'):
             for i in xrange(len(X)):
                 corpus.append(self.__corpus[X[i]])
                 annotation.append(self.__y_int[X[i]])
@@ -120,15 +121,36 @@ class Experiment():
             corpus = self.__vectorizer.transform(corpus)
             unlabeled_corpus = self.__vectorizer.transform(unlabeled_corpus)
             testing_corpus = self.__vectorizer.transform(testing_corpus)
+        elif(classifier == 'EMNB'):
+            for i in xrange(len(X)):
+                corpus.append(self.__corpus[X[i]])
+                if(self.__y_int[X[i]] == 1):
+                    annotation.append([0,1])
+                else:
+                    annotation.append([1,0])
+            for i in xrange(len(Xun)):
+                unlabeled_corpus.append(self.__corpus[Xun[i]])
+            for i in xrange(len(testing)):
+                testing_corpus.append(self.__corpus[testing[i]])
+                if(self.__y_int[testing[i]] == 1):
+                    testing_annotation.append(1)
+                else:
+                    testing_annotation.append(0)
+            annotation = np.array(annotation)
+            testing_annotation = testing_annotation
+            corpus = np.array(self.__vectorizer.transform(corpus).toarray())
+            unlabeled_corpus = np.array(self.__vectorizer.transform(unlabeled_corpus).toarray())
+            testing_corpus = np.array(self.__vectorizer.transform(testing_corpus).toarray())
         return corpus, annotation, unlabeled_corpus, testing_corpus, testing_annotation
 
-    def genetic_optimization(self, number_gen, classifier, init_pop, num_survivers, iter_number): #genetic algorithm to optimize the params
+    def genetic_optimization(self, number_gen, classifier, init_pop, num_survivers, iter_number, save_file = True): #genetic algorithm to optimize the params
         param_index = []
         result_index = []
         global_best_accuracy = 0
         global_best_index = []
         results_to_plot = []
-        results_file = open('result.csv', 'w')
+        if(save_file):
+            results_file = open('result_'+classifier+str(time.time())+'.csv', 'w')
         for i in xrange(init_pop):
             param_index.append(self.get_params(classifier))
         for gen in xrange(number_gen):
@@ -146,9 +168,10 @@ class Experiment():
             param_index = self.crossover(param_index, survivers, init_pop, classifier)
             print "Ending generation: ", gen, "in:", str(time.time() - time1)
             print "Best Result until now", global_best_accuracy
+            if(save_file):
+                results_file.write(str(global_best_accuracy)+';'+str(global_best_index)+'\n')
+                results_file.flush()
         plt.plot(range(0, len(results_to_plot)), results_to_plot)
-        results_file.write(str(results_to_plot))
-        results_file.write(str(global_best_index))
         plt.show()
 
     def get_function_result(self, classifier, index, iter_number):
@@ -222,7 +245,7 @@ class Experiment():
             ignore_zero_addr = bleaching = random.choice([True, False]) #ignore_zero_addr => True or False
             confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
             bleaching = random.choice([True, False]) #bleaching => True or False
-            num_bits_addr = random.randint(2, 36) #num_bits_addr => discrete (2, 36)
+            num_bits_addr = random.randint(2, 72) #num_bits_addr => discrete (2, 36)
             return ss_confidence, ignore_zero_addr, confidence_threshold, bleaching, num_bits_addr
         if(classifier == 'S3VM'):
             lam = random.random()
@@ -239,8 +262,26 @@ class Experiment():
 if __name__ == "__main__":
 
     exp1 = Experiment("new_sts","en")
-    exp1.genetic_optimization(number_gen = 40, 
-                              classifier = 'WiSARD',
-                              init_pop = 100,
+    '''
+    exp1.genetic_optimization(number_gen = 20, 
+                              classifier = 'S3VM',
+                              init_pop = 50,
                               num_survivers = 20,
-                              iter_number = 10)
+                              iter_number = 3)
+    '''
+    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.8, 0.1, 'EMNB')
+    tup = exp1.get_status()
+    emnb = SemiNB()
+    time1 = time.time()
+    emnb.train_semi(np.transpose(X), y, np.transpose(Xun))
+    print (time.time() - time1), 'tempo de fit'
+    summing = 0
+    time1 = time.time()
+    for i in xrange(len(testing_X)):
+        result = emnb.predict(np.transpose(testing_X[i]))
+        if testing_y[i] == result:
+            summing += 1
+    print (time.time() - time1), 'tempo de fit'
+    print summing/float(len(testing_X))
+    
+    
