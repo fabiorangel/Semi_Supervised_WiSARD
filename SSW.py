@@ -21,6 +21,7 @@ class SemiSupervisedWiSARD(): # Input: labeled examples and unlabeled examples -
         self.__is_ignoring_zero_addr = ignore_zero_addr
         self.__set_of_classes = set_of_classes
         self.__ss_confidence = ss_confidence
+        self.__num_of_used_Xun = 0
 
         self.__main_wisard =  WiSARD(retina_size = self.__retina_size,
                                      num_bits_addr = self.__num_bits_addr,
@@ -61,7 +62,6 @@ class SemiSupervisedWiSARD(): # Input: labeled examples and unlabeled examples -
 
                 for i in xrange(len(values)): #pairing results and classes
                     list_possible_classes.append([index[i], values[i]])
-
                 list_possible_classes = sorted(list_possible_classes, key=lambda a_entry: a_entry[1]) #sorting list by the values
                 if(list_possible_classes[-1][1] != 0): #best result must be diferent from zero
                     ss_confidence = 1 - float(list_possible_classes[-2][1])/float(list_possible_classes[-1][1]) #calculating confidence
@@ -69,7 +69,8 @@ class SemiSupervisedWiSARD(): # Input: labeled examples and unlabeled examples -
                     ss_confidence = 0.0 #if best result == 0, confidence is zero
                 if(ss_confidence >= self.__ss_confidence): #if I have confidence in the result, i'll train this example to the selected class
                     class_name = list_possible_classes[-1][0]
-                    self.__main_wisard.add_training(class_name, unlabeled_X[position])         
+                    self.__main_wisard.add_training(class_name, unlabeled_X[position])
+                    self.__num_of_used_Xun += 1         
 
     def __setup(self):
         for class_name in self.__set_of_classes:
@@ -80,6 +81,9 @@ class SemiSupervisedWiSARD(): # Input: labeled examples and unlabeled examples -
         for position in xrange(len(testing_corpus)):
             result.append(self.__main_wisard.classify(testing_corpus[position]))
         return result
+
+    def get_status(self):
+      return self.__num_of_used_Xun
 
 
 if __name__ == "__main__":

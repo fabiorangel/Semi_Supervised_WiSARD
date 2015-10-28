@@ -144,13 +144,14 @@ class Experiment():
         return corpus, annotation, unlabeled_corpus, testing_corpus, testing_annotation
 
     def genetic_optimization(self, number_gen, classifier, init_pop, num_survivers, iter_number, save_file = True): #genetic algorithm to optimize the params
+        print '*** genetic optimation for '+classifier+' classifier ***'
         param_index = []
         result_index = []
         global_best_accuracy = 0
         global_best_index = []
         results_to_plot = []
         if(save_file):
-            results_file = open('result_'+classifier+str(time.time())+'.csv', 'w')
+            results_file = open('Results/result_'+classifier+str(time.time())+'.csv', 'w')
         for i in xrange(init_pop):
             param_index.append(self.get_params(classifier))
         for gen in xrange(number_gen):
@@ -177,7 +178,7 @@ class Experiment():
     def get_function_result(self, classifier, index, iter_number):
         partial_result = []
         for i in xrange(iter_number):
-            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.7, 0.1, classifier)
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.1, 0.8, classifier)
             if(classifier == 'WiSARD'):
                 wisard = SemiSupervisedWiSARD(ss_confidence = index[0],
                                               ignore_zero_addr= index[1],
@@ -245,7 +246,7 @@ class Experiment():
             ignore_zero_addr = bleaching = random.choice([True, False]) #ignore_zero_addr => True or False
             confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
             bleaching = random.choice([True, False]) #bleaching => True or False
-            num_bits_addr = random.randint(2, 72) #num_bits_addr => discrete (2, 36)
+            num_bits_addr = random.randint(2, 72) #num_bits_addr => discrete (2, 72)
             return ss_confidence, ignore_zero_addr, confidence_threshold, bleaching, num_bits_addr
         if(classifier == 'S3VM'):
             lam = random.random()
@@ -260,16 +261,29 @@ class Experiment():
         index[param] = new_index[param]
 
 if __name__ == "__main__":
-
     exp1 = Experiment("new_sts","en")
-    '''
+    
     exp1.genetic_optimization(number_gen = 20, 
-                              classifier = 'S3VM',
-                              init_pop = 50,
+                              classifier = 'WiSARD',
+                              init_pop = 70,
                               num_survivers = 20,
-                              iter_number = 3)
+                              iter_number = 10)
+    
     '''
-    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.8, 0.1, 'EMNB')
+    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.85, 'WiSARD')
+    tup = exp1.get_status()
+    w1 = SemiSupervisedWiSARD(retina_size = tup[0], 
+                              num_bits_addr = 26, 
+                              bleaching = True, 
+                              confidence_threshold = 0.014703927728999089, 
+                              ignore_zero_addr = True,
+                              set_of_classes = tup[1],
+                              ss_confidence = 0.3849001947)
+    w1.fit(X, y, Xun)
+    print w1.get_status()
+    print exp1.SS_WiSARD_eval(w1.predict(testing_X), testing_y)
+    '''
+    '''
     tup = exp1.get_status()
     emnb = SemiNB()
     time1 = time.time()
@@ -283,5 +297,4 @@ if __name__ == "__main__":
             summing += 1
     print (time.time() - time1), 'tempo de fit'
     print summing/float(len(testing_X))
-    
-    
+    '''
