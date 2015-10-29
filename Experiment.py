@@ -76,7 +76,7 @@ class Experiment():
     def get_status(self):
         return self.__feature_vector_len, list(self.__set_of_classes), self.__X, self.__y
 
-    def random_subsampling(self, X_f, Xun_f, classifier): #implements random subsampling
+    def random_subsampling(self, X_f, Xun_f, y_f,classifier): #implements random subsampling
         if(Xun_f + X_f >= 1.0):
             raise Exception("Cannot sampling if X_f + Xun_f >= 1.0")
         if(Xun_f < 0.0 or Xun_f > 1.0):
@@ -86,13 +86,14 @@ class Experiment():
 
         labeled_size = int(self.__number_of_examples*X_f)
         unlabeled_size = int(self.__number_of_examples*Xun_f)
+        testing_size = int(self.__number_of_examples*y_f)
 
         all_positions = range(self.__number_of_examples)
         random.shuffle(all_positions)
 
         X = all_positions[0 : labeled_size]
         Xun = all_positions[labeled_size : unlabeled_size+labeled_size]
-        testing = all_positions[unlabeled_size+labeled_size : ]
+        testing = all_positions[unlabeled_size+labeled_size : testing_size+unlabeled_size+labeled_size]
 
         corpus = []
         annotation = []
@@ -178,7 +179,7 @@ class Experiment():
     def get_function_result(self, classifier, index, iter_number):
         partial_result = []
         for i in xrange(iter_number):
-            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.1, 0.8, classifier)
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.1, 0.6, 0.3,classifier)
             if(classifier == 'WiSARD'):
                 wisard = SemiSupervisedWiSARD(ss_confidence = index[0],
                                               ignore_zero_addr= index[1],
@@ -262,28 +263,29 @@ class Experiment():
 
 if __name__ == "__main__":
     exp1 = Experiment("new_sts","en")
-    
-    exp1.genetic_optimization(number_gen = 20, 
+    exp1.genetic_optimization(number_gen = 2000, 
                               classifier = 'WiSARD',
-                              init_pop = 70,
-                              num_survivers = 20,
-                              iter_number = 10)
+                              init_pop = 200,
+                              num_survivers = 50,
+                              iter_number = 5)
     
     '''
-    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.85, 'WiSARD')
+    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.8, 0.1,'EMNB')
     tup = exp1.get_status()
+    
     w1 = SemiSupervisedWiSARD(retina_size = tup[0], 
-                              num_bits_addr = 26, 
-                              bleaching = True, 
-                              confidence_threshold = 0.014703927728999089, 
+                              num_bits_addr = 5, 
+                              bleaching = False, 
+                              confidence_threshold = 0.5598888611857481, 
                               ignore_zero_addr = True,
                               set_of_classes = tup[1],
-                              ss_confidence = 0.3849001947)
+                              ss_confidence = 0.4801083402714187)
     w1.fit(X, y, Xun)
     print w1.get_status()
     print exp1.SS_WiSARD_eval(w1.predict(testing_X), testing_y)
     '''
     '''
+    X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.8, 0.1,'EMNB')
     tup = exp1.get_status()
     emnb = SemiNB()
     time1 = time.time()

@@ -201,7 +201,7 @@ class SemiNB(object):
             lik_new = loglikelihood(td, delta, tdu,
                                     np.log(self.p_w_c), np.log(self.p_c))
             lik_diff = lik_new - lik
-            assert(lik_diff >= -1e-10)
+            #assert(lik_diff >= -1e-10)
             lik = lik_new
 
             if lik_diff < eps:
