@@ -50,7 +50,6 @@ class Experiment():
             vec[0] = utl.remove_marks(vec[0])
             vec[0] = utl.replace_mentions(vec[0])
             vec[0] = utl.delete_links(vec[0])
-            vec[0] = stem(vec[0])
             phrase = ''
             for elem in vec[0].split(' '):
                 if(self.__lang == 'en'):
@@ -77,7 +76,7 @@ class Experiment():
         return self.__feature_vector_len, list(self.__set_of_classes), self.__X, self.__y
 
     def random_subsampling(self, X_f, Xun_f, y_f,classifier): #implements random subsampling
-        if(Xun_f + X_f >= 1.0):
+        if(Xun_f + X_f > 1.0):
             raise Exception("Cannot sampling if X_f + Xun_f >= 1.0")
         if(Xun_f < 0.0 or Xun_f > 1.0):
             raise Exception("Xun_f must be in the range: 0.0 <= Xun_f <= 1.0")
@@ -152,13 +151,14 @@ class Experiment():
         global_best_index = []
         results_to_plot = []
         if(save_file):
-            results_file = open('Results/result_'+classifier+str(time.time())+'.csv', 'w')
+            results_file = open('Results/result_'+self.__file_name+"_"+classifier+str(time.time())+'.csv', 'w')
         for i in xrange(init_pop):
             param_index.append(self.get_params(classifier))
         for gen in xrange(number_gen):
             time1 = time.time()
             for i in xrange(init_pop):
                 result_index.append(self.get_function_result(classifier, param_index[i], iter_number))
+                print "Element number :", i
             result_array = np.array(result_index)
             survivers = result_array.argsort()[-num_survivers:][::-1]
             best_result = result_array[np.argmax(result_array)]
@@ -179,7 +179,7 @@ class Experiment():
     def get_function_result(self, classifier, index, iter_number):
         partial_result = []
         for i in xrange(iter_number):
-            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.1, 0.6, 0.3,classifier)
+            X, y, Xun, testing_X, testing_y = self.random_subsampling(0.2, 0.5, 0.3,classifier)
             if(classifier == 'WiSARD'):
                 wisard = SemiSupervisedWiSARD(ss_confidence = index[0],
                                               ignore_zero_addr= index[1],
@@ -244,7 +244,7 @@ class Experiment():
     def get_params(self, classifier):
         if(classifier == 'WiSARD'):
             ss_confidence = random.uniform(0.0, 1.0) #ss_confidence => (0.0,1.0)
-            ignore_zero_addr = bleaching = random.choice([True, False]) #ignore_zero_addr => True or False
+            ignore_zero_addr = random.choice([True, False]) #ignore_zero_addr => True or False
             confidence_threshold = random.uniform(0.0, 1.0) #confidence_threshold => (0.0,1.0)
             bleaching = random.choice([True, False]) #bleaching => True or False
             num_bits_addr = random.randint(2, 72) #num_bits_addr => discrete (2, 72)
@@ -261,13 +261,130 @@ class Experiment():
         param = random.randint(0, len(index) - 1)
         index[param] = new_index[param]
 
+    def validation(self, classifier, tuple_of_params, iter_number):
+
+        if(classifier == 'WiSARD'):
+            w1 = []
+            partial_result = []
+            time_training = []
+            time_predicting = []
+            for i in xrange(iter_number):
+                w1 = SemiSupervisedWiSARD(ss_confidence = tuple_of_params[0],
+                                              ignore_zero_addr= tuple_of_params[1],
+                                              confidence_threshold = tuple_of_params[2],
+                                              bleaching = tuple_of_params[3],
+                                              num_bits_addr = tuple_of_params[4],
+                                              retina_size = self.__feature_vector_len,
+                                              set_of_classes = self.__set_of_classes)
+
+                X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.6, 0.3,'WiSARD')
+                time1 = time.time()
+                w1.fit(X, y, Xun)
+                time2 = time.time()
+                partial_result.append(self.SS_WiSARD_eval(w1.predict(testing_X), testing_y))
+                time3 = time.time()
+                time_training.append(time2 - time1)
+                time_predicting.append(time3 - time2)
+
+            return (np.mean(partial_result), np.mean(time_training), np.mean(time_predicting))
+
+        if(classifier == 'S3VM'):
+            svm = []
+            partial_result = []
+            for i in xrange(iter_number):
+                X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.6, 0.3,'S3VM')
+                time1 = time.time()
+                svm = qns3vm.QN_S3VM_Sparse(X, y, Xun, random)
+                svm.parameters['lam'] = tuple_of_params[0]
+                svm.parameters['lamU'] = tuple_of_params[1]
+                svm.parameters['sigma'] = tuple_of_params[2]
+                svm.parameters['kernel_type'] = tuple_of_params[3]
+                svm.train()
+                time2 = time.time()
+                partial_result.append(self.S3VM_eval(svm.getPredictions(testing_X),testing_y))
+                time3 = time.time()
+                time_training.append(time2 - time1)
+                time_predicting.append(time3 - time2)
+
+            return (np.mean(partial_result), np.mean(time_training), np.mean(time_predicting))
+
+        if(classifier == 'EMNB'):
+            w1 = []
+            partial_result = []
+            time_training = []
+            time_predicting = []
+            
+            for i in xrange(iter_number):
+
+                X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.6, 0.3,'EMNB')
+                time1 = time.time()
+                emnb = SemiNB()
+                emnb.train_semi(np.transpose(X), y, np.transpose(Xun))
+                time2 = time.time() #training time
+                summing = 0
+                for j in xrange(len(testing_X)):
+                    result = emnb.predict(np.transpose(testing_X[j]))
+                    if testing_y[j] == result:
+                        summing += 1
+                partial_result.append(float(summing)/len(testing_X))
+                time3 = time.time()
+                time_training.append(time2 - time1)
+                time_predicting.append(time3 - time2)
+
+            return (np.mean(partial_result), np.mean(time_training), np.mean(time_predicting))
+
 if __name__ == "__main__":
-    exp1 = Experiment("new_sts","en")
-    exp1.genetic_optimization(number_gen = 2000, 
-                              classifier = 'WiSARD',
-                              init_pop = 200,
-                              num_survivers = 50,
-                              iter_number = 5)
+    database = "new_omd"
+    exp1 = Experiment(database,"en")
+    tuple_of_params = ()
+    print "USING DATABASE: ", database
+    #teste da ss_wisard
+    #tuple_of_params = (0.9278612484835791, False, 0.013200197752487042, True, 24)
+    #print exp1.validation('WiSARD', tuple_of_params, 5)
+
+    #teste do s3vm [0.017956344335129826, 0.056360691452574274, 0.8350295111100142, 'RBF']
+    #tuple_of_params = (0.017956344335129826, 0.056360691452574274, 0.8350295111100142, 'RBF')
+    #print exp1.validation('S3VM', tuple_of_params, 30)
+
+    #teste da emnb
+    #print exp1.validation('EMNB', tuple_of_params, 5)
+    
+    # X, y, Xun, testing_X, testing_y = exp1.random_subsampling(1.0, 0.0, 0.0,'WiSARD')
+    # saida = open("hcr_train_cpp_X.csv", "w")
+    # saida2 = open("hcr_train_cpp_y.csv", "w")
+
+    # labels = {}
+    # for i in xrange(len(X)):
+    #     label = y[i].replace("\r","")
+    #     if(y[i] in labels.keys()):
+    #         labels[y[i]] += 1
+    #     else:
+    #         labels[y[i]] = 1
+        
+    # print labels
+    
+    # for i in xrange(len(X)):
+    #     label = y[i].replace("\r","")
+    #     if(label == "1" or label == "2"):
+    #         saida.write(str(X[i][0]))
+    #         for j in xrange(1, len(X[i])):
+    #             saida.write(',')
+    #             saida.write(str(X[i][j]))
+    #         saida.write('\n')
+    #         saida2.write(",")
+    #         if(label == "1"):
+    #             saida2.write(label)
+    #         else:
+    #             saida2.write("-1")
+
+    # saida.close()
+    # saida2.close()
+
+    exp1.genetic_optimization(number_gen = 40, 
+                              classifier = 'S3VM',
+                              init_pop = 100,
+                              num_survivers = 20,
+                              iter_number = 30)
     
     '''
     X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.8, 0.1,'EMNB')
@@ -283,8 +400,7 @@ if __name__ == "__main__":
     w1.fit(X, y, Xun)
     print w1.get_status()
     print exp1.SS_WiSARD_eval(w1.predict(testing_X), testing_y)
-    '''
-    '''
+    
     X, y, Xun, testing_X, testing_y = exp1.random_subsampling(0.1, 0.8, 0.1,'EMNB')
     tup = exp1.get_status()
     emnb = SemiNB()
@@ -292,7 +408,6 @@ if __name__ == "__main__":
     emnb.train_semi(np.transpose(X), y, np.transpose(Xun))
     print (time.time() - time1), 'tempo de fit'
     summing = 0
-    time1 = time.time()
     for i in xrange(len(testing_X)):
         result = emnb.predict(np.transpose(testing_X[i]))
         if testing_y[i] == result:
